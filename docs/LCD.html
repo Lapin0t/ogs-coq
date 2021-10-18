@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" class="alectryon-standalone" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+<title>Simply-typed lambda-calculus</title>
+<link rel="stylesheet" href="alectryon.css" type="text/css" />
+<link rel="stylesheet" href="docutils_basic.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.min.css" type="text/css" />
+<script type="text/javascript" src="alectryon.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/IBM-type/0.5.4/css/ibm-type.min.css" integrity="sha512-sky5cf9Ts6FY1kstGOBHSybfKqdHR41M0Ldb0BjNiv3ifltoQIsg0zIaQ+wwdwgQ0w9vKFW7Js50lxH9vqNSSw==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/firacode/5.2.0/fira_code.min.css" integrity="sha512-MbysAYimH1hH2xYzkkMHB6MqxBqfP0megxsCLknbYqHVwXTCg9IqHbk+ZP/vnhO8UEW6PaXAkKe2vQ+SWACxxA==" crossorigin="anonymous" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<div class="alectryon-root alectryon-centered"><div class="alectryon-banner">Built with <a href="https://github.com/cpitclaudel/alectryon/">Alectryon</a>, running Coq+SerAPI v8.12.0+0.12.1. Bubbles (<span class="alectryon-bubble"></span>) indicate interactive fragments: hover for details, tap to reveal contents. Use <kbd>Ctrl+↑</kbd> <kbd>Ctrl+↓</kbd> to navigate, <kbd>Ctrl+🖱️</kbd> to focus. On Mac, use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.</div><div class="document" id="simply-typed-lambda-calculus">
+<h1 class="title">Simply-typed lambda-calculus</h1>
+<table class="docinfo" frame="void" rules="none">
+<col class="docinfo-name" />
+<col class="docinfo-content" />
+<tbody valign="top">
+</tbody>
+</table>
+<input type="checkbox" class="alectryon-toggle" id="alectryon-toggle-0" /><label for="alectryon-toggle-0" class="alectryon-toggle-label">Display all goals and responses</label><div class="alectryon-container docutils container">
+<div class="section" id="syntax">
+<h1>Syntax</h1>
+<p>First we will define the well-typed syntax of our language.</p>
+<div class="section" id="context-and-types">
+<h2>Context and types</h2>
+<p>Let's define the types of our language. We will have unit, product,
+disjoint union (ie sum) and functions, equipped with the usual notations.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">ty</span> : <span class="kt">Type</span> :=
+| Unit : ty
+| Prod : ty -&gt; ty -&gt; ty
+| Arr : ty -&gt; ty -&gt; ty
+| Sum : ty -&gt; ty -&gt; ty
+.</span></span></span></pre><pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Notation</span> <span class="s2">&quot;A → B&quot;</span> := (Arr A B) (<span class="kn">at level</span> <span class="mi">40</span>) : ty_scope .</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Notation</span> <span class="s2">&quot;A × B&quot;</span> := (Prod A B) (<span class="kn">at level</span> <span class="mi">40</span>) : ty_scope.</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Notation</span> <span class="s2">&quot;A + B&quot;</span> := (Sum A B) : ty_scope.</span></span></span></pre><p>Our contexts (stacks of types) will be called <tt class="docutils literal">ctx</tt>. They are defined generically
+in <tt class="docutils literal">Ctx.v</tt>.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">ctx</span> : <span class="kt">Type</span> := Ctx.ctx ty.</span></span></span></pre></div>
+<div class="section" id="negative-and-positive-types">
+<h2>Negative and positive types</h2>
+<p>Our next couple of definitions will focus on segregating types between &quot;positive&quot;
+and &quot;negative&quot; types. These terms are heavily overloaded in language theory with
+subtle differences between concepts of polarization:</p>
+<ul class="simple">
+<li>polarized linear logic, focusing &amp; proof nets</li>
+<li>values (+) vs computation (-) in call-by-push-value (CBPV) and other
+effect calculi</li>
+<li>inductive data-types (+) vs coinductive record-types (-) in agda and
+coq (with primitive projections)</li>
+</ul>
+<p>Our language is quite concrete as such we won't try to relate our
+notion of polarity too precisely with these notions: our only negative
+type is function type (irrespective of the domain and codomain) while
+unit, product and sum are positive. What is important for us is that
+values of negative types are <em>opaque</em> in the sense that a term can
+only destruct it (eg apply a function).</p>
+<p>We'll define an <tt class="docutils literal">is_neg</tt> predicate, negative types and contexts
+containing only negative types.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">is_neg</span> : ty -&gt; <span class="kt">Type</span> := | NArr {a b} : is_neg (a → b) .</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">neg_ty</span> : <span class="kt">Type</span> := { t : ty &amp; is_neg t }.</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">neg_ctx</span> : <span class="kt">Type</span> := Ctx.ctx neg_ty.</span></span></span></pre><p>Our first non-trivial lemma: if a variable in negative context has
+type <tt class="docutils literal">x</tt> then <tt class="docutils literal">x</tt> is negative.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations neg_var {Γ : neg_ctx} {x : ty} : (Γ : ctx) ∋ x -&gt; is_neg x :=
+  @neg_var ∅       _ (!) ;
+  @neg_var (_ ▶ t) _ (top)   := projT2 t ;
+  @neg_var (_ ▶ _) _ (pop i) := neg_var i .</span></span></span></pre></div>
+<div class="section" id="syntax-of-terms">
+<h2>Syntax of terms</h2>
+<p>This is the usual well-typed representation of terms: any coq term
+<tt class="docutils literal">t : term Γ x</tt> denotes a well-typed and well-scoped term of type <tt class="docutils literal">x</tt>
+in context <tt class="docutils literal">Γ</tt>.</p>
+<p>As in most other simple type systems, our typing rules match
+one-to-one with our syntactic rules. As we're not really interested
+(yet?) in writing a typechecker (nor a parser), we don't bother
+defining untyped terms and the usual predicate for a typing judgement
+as this would just duplicate code.</p>
+<p>Additionally, functions on intrinsically typed terms like
+substitution, renaming or evaluation carry with them the proof that
+they preserve typing: no subject reduction to prove! Our functions
+will really be proofs with computational content, which may make them
+slightly more complicated, but which can help by restricting what can
+be done (no more blind de-bruijn indices manipulation).</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">term</span> : ctx -&gt; ty -&gt; <span class="kt">Type</span> :=
+| Var {Γ a} : Γ ∋ a -&gt; term Γ a
+| Lam {Γ a b} : term (Γ ▶ a) b -&gt; term Γ (a → b)
+| Rec {Γ a b} : term (Γ ▶ (a → b)%ty ▶ a) b -&gt; term Γ (a → b)
+| App {Γ a b} : term Γ (a → b) -&gt; term Γ a -&gt; term Γ b
+| Pair {Γ a b} : term Γ a -&gt; term Γ b -&gt; term Γ (a × b)
+| PMatch {Γ a b x} : term Γ (a × b) -&gt; term (Γ ▶ a ▶ b) x -&gt; term Γ x
+| Inl {Γ a b} : term Γ a -&gt; term Γ (a + b)
+| Inr {Γ a b} : term Γ b -&gt; term Γ (a + b)
+| SMatch {Γ a b x} : term Γ (a + b) -&gt; term (Γ ▶ a) x -&gt; term (Γ ▶ b) x
+                                                      -&gt; term Γ x
+.</span></span></span></pre><p>Simultaneous renaming. This is functoriality of term (as presheaves on contexts).</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations t_rename {Γ Δ} (f : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; Δ ∋ t) {t}
+          : term Γ t -&gt; term Δ t :=
+  t_rename f (Var i)        := Var (f _ i) ;
+  t_rename f (Lam u)        := Lam (t_rename (r_shift f) u) ;
+  t_rename f (Rec u)        := Rec (t_rename (r_shift (r_shift f)) u) ;
+  t_rename f (App u v)      := App (t_rename f u) (t_rename f v) ;
+  t_rename f (Pair u v)     := Pair (t_rename f u) (t_rename f v) ;
+  t_rename f (PMatch u v)   := PMatch (t_rename f u)
+                                      (t_rename (r_shift2 f) v) ;
+  t_rename f (Inl u)        := Inl (t_rename f u) ; 
+  t_rename f (Inr u)        := Inr (t_rename f u) ; 
+  t_rename f (SMatch u v w) := SMatch (t_rename f u)
+                                      (t_rename (r_shift f) v)
+                                      (t_rename (r_shift f) w).</span></span></span></pre><p>Weakening by one new variable in context.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">t_shift</span> {<span class="nv">Γ</span>} {<span class="nv">x</span> <span class="nv">y</span>} : term Γ x -&gt; term (Γ ▶ y) x :=
+  t_rename (<span class="kr">fun</span> <span class="nv">_</span> =&gt; pop).</span></span></span></pre><p>Weakening in a substitution: if we have a substitution <tt class="docutils literal">Γ ⇒ₛ Δ</tt> then we have
+a substitution <tt class="docutils literal">(Γ ▶ a) ⇒ₛ (Δ ▶ a)</tt>.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">s_shift</span> {<span class="nv">Γ</span> <span class="nv">Δ</span> <span class="nv">a</span>} (<span class="nv">f</span> : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; term Δ t)
+           : <span class="kr">forall</span> <span class="nv">t</span>, (Γ ▶ a) ∋ t -&gt; term (Δ ▶ a) t
+  := has_case (Var top) (<span class="kr">fun</span> <span class="nv">_</span> <span class="nv">i</span> =&gt; t_shift (f _ i)).</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-wsp"><span class="highlight">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">s_shift2</span> {<span class="nv">Γ</span> <span class="nv">Δ</span> <span class="nv">a</span> <span class="nv">b</span>} (<span class="nv">f</span> : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; term Δ t)
+           : <span class="kr">forall</span> <span class="nv">t</span>, (Γ ▶ a ▶ b) ∋ t -&gt; term (Δ ▶ a ▶ b) t
+  := s_shift (s_shift f).</span></span></span></pre><p>Simultaneous substitution. This is a skew multiplication, analoguous to the
+join of monads, generalized to a skew monoidal structure on presheaves.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations t_subst {Γ Δ} (f : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; term Δ t) {t}
+          : term Γ t -&gt; term Δ t :=
+  t_subst f (Var i)       := f _ i ;
+  t_subst f (Lam u)       := Lam (t_subst (s_shift f) u) ;
+  t_subst f (Rec u)       := Rec (t_subst (s_shift2 f) u) ;
+  t_subst f (App u v)     := App (t_subst f u) (t_subst f v) ;
+  t_subst f (Pair u v)    := Pair (t_subst f u) (t_subst f v) ;
+  t_subst f (PMatch u v)  := PMatch (t_subst f u)
+                                    (t_subst (s_shift2 f) v) ;
+  t_subst f (Inl u)       := Inl (t_subst f u) ;
+  t_subst f (Inr u)       := Inr (t_subst f u) ;
+  t_subst f (SMatch u v w) := SMatch (t_subst f u)
+                                     (t_subst (s_shift f) v)
+                                     (t_subst (s_shift f) w).</span></span></span></pre><p>Substituting the top variable only.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations t_subst1 {Γ a b} : term (Γ ▶ a) b -&gt; term Γ a -&gt; term Γ b :=
+  t_subst1 u v := t_subst f u
+    <span class="kn">where</span> f : <span class="kr">forall</span> <span class="nv">t</span>, (Γ ▶ a) ∋ t -&gt; term Γ t := {
+          f _ top     := v ;
+          f _ (pop i) := Var i }.</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-wsp"><span class="highlight">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Notation</span> <span class="s2">&quot;u /ₛ v&quot;</span> := (t_subst1 u v) (<span class="kn">at level</span> <span class="mi">50</span>, <span class="kn">left associativity</span>).</span></span></span></pre></div>
+</div>
+<div class="section" id="cbv-evaluation">
+<h1>CBV evaluation</h1>
+<p>Call-by-value reduction fully reduces the arguments to a function call
+before substituting them into the function's body. It is eager in the
+sense that this may or may not have been needed depending what the
+function does with its arguments, yet it did it preemptively. The term
+&quot;eager normal form&quot; (ENF) has been introduced by Soren Lassen
+when adapting Böhm trees from call-by-name to call-by-value: Lassen
+trees caracterize ENF-bisimulation whereas Böhm trees caracterize
+strong-NF-bisimulation.</p>
+<p>TODO check terms and facts</p>
+<div class="section" id="eager-values">
+<h2>Eager values</h2>
+<p>Eager values are lambda-terms that do not contain any eager-redex. One can note
+the general pattern: <tt class="docutils literal">val := <span class="pre">pos-intro(val)</span> | <span class="pre">neg-intro(term)</span></tt>.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">e_val</span> (<span class="nv">Γ</span> : ctx) : ty -&gt; <span class="kt">Type</span> :=
+| VVar {x} : Γ ∋ x -&gt; e_val Γ x
+| VLam {a b} : term (Γ ▶ a) b -&gt; e_val Γ (a → b)
+| VRec {a b} : term (Γ ▶ (a → b)%ty ▶ a) b -&gt; e_val Γ (a → b)
+| VPair {a b} : e_val Γ a -&gt; e_val Γ b -&gt; e_val Γ (a × b)
+| VInl {a b} : e_val Γ a -&gt; e_val Γ (a + b)
+| VInr {a b} : e_val Γ b -&gt; e_val Γ (a + b)
+.</span></span></span></pre><p>Eager values are trivially a subset of terms.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations t_of_val {Γ x} : e_val Γ x -&gt; term Γ x :=
+  t_of_val (VVar i) := Var i ;
+  t_of_val (VLam u) := Lam u ;
+  t_of_val (VRec u) := Rec u ;
+  t_of_val (VPair u v) := Pair (t_of_val u) (t_of_val v) ;
+  t_of_val (VInl u) := Inl (t_of_val u) ;
+  t_of_val (VInr u) := Inr (t_of_val u) .</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Coercion</span> <span class="nf">t_of_val</span> : e_val &gt;-&gt; term.</span></span></span></pre><p>In an ideal world, values being a subset of terms, we could lift the
+renaming action from terms to values. Our definition aren't expressive enough yet
+so here's the due.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations v_rename {Γ Δ} (f : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; Δ ∋ t) {t}
+          : e_val Γ t -&gt; e_val Δ t :=
+  v_rename f (VVar i)    := VVar (f _ i) ;
+  v_rename f (VLam u)    := VLam (t_rename (r_shift f) u) ;
+  v_rename f (VRec u)    := VRec (t_rename (r_shift2 f) u) ;
+  v_rename f (VPair u v) := VPair (v_rename f u) (v_rename f v) ;
+  v_rename f (VInl u)    := VInl (v_rename f u) ;
+  v_rename f (VInr u)    := VInr (v_rename f u) .</span></span></span></pre></div>
+<div class="section" id="eager-contexts">
+<h2>Eager contexts</h2>
+<p>Term-contexts — not to be confused with typing contexts — are terms
+with a single hole, ie extended with a (linear) meta-variable. As
+explained by Conor McBride, these one-hole contexts are linked to the
+derivative of the signature of terms hence could be generated
+automatically from it.</p>
+<p>Our contexts are (eager) <em>evaluation</em> contexts, that is they caracterize all the
+places at which it is possible to do an eager reduction. As such, we can observe
+that our contexts don't allow to put the hole below any binder (lambda, rec-lambda,
+continuations of match constructs).</p>
+<p>Our contexts grow outwards, that is the operator closest to the hole
+will be the head-constructor of the context. They are intrinsically-typed as follows:
+an element of <tt class="docutils literal">e_ctx Γ x y</tt> is a term of type <tt class="docutils literal">x</tt> in context <tt class="docutils literal">Γ</tt> with a hole
+of type <tt class="docutils literal">y</tt> (and context <tt class="docutils literal">Γ</tt> too, since it can't cross binders).</p>
+<p>This is exactely the type of the call-stack of the CBV evaluator.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">e_ctx</span> (<span class="nv">Γ</span> : ctx) (<span class="nv">t</span> : ty) : ty -&gt; <span class="kt">Type</span> :=
+| EHole : e_ctx Γ t t
+| EApp_l {a b} : e_ctx Γ t b -&gt; term Γ a -&gt; e_ctx Γ t (a → b)
+| EApp_r {a b} : e_ctx Γ t b -&gt; e_val Γ (a → b) -&gt; e_ctx Γ t a
+| EPair_l {a b} : e_ctx Γ t (a × b) -&gt; term Γ b -&gt; e_ctx Γ t a
+| EPair_r {a b} : e_ctx Γ t (a × b) -&gt; e_val Γ a -&gt; e_ctx Γ t b
+| EPMatch {a b x} : e_ctx Γ t x -&gt; term (Γ ▶ a ▶ b) x -&gt; e_ctx Γ t (a × b)
+| EInl {a b} : e_ctx Γ t (a + b) -&gt; e_ctx Γ t a
+| EInr {a b} : e_ctx Γ t (a + b) -&gt; e_ctx Γ t b
+| ESMatch {a b x} : e_ctx Γ t x -&gt; term (Γ ▶ a) x -&gt; term (Γ ▶ b) x -&gt; e_ctx Γ t (a + b)
+.</span></span></span></pre><p>Still administrative work..</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations e_rename {Γ Δ x y} (f : <span class="kr">forall</span> <span class="nv">t</span>, Γ ∋ t -&gt; Δ ∋ t)
+          : e_ctx Γ y x -&gt; e_ctx Δ y x :=
+  e_rename f EHole         := EHole ;
+  e_rename f (EApp_r E u)  := EApp_r (e_rename f E) (v_rename f u) ;
+  e_rename f (EApp_l E u)  := EApp_l (e_rename f E) (t_rename f u) ;
+  e_rename f (EPair_r E u) := EPair_r (e_rename f E) (v_rename f u) ;
+  e_rename f (EPair_l E u) := EPair_l (e_rename f E) (t_rename f u) ;
+  e_rename f (EPMatch E u) := EPMatch (e_rename f E)
+                                      (t_rename (r_shift2 f) u) ;
+  e_rename f (EInl E)      := EInl (e_rename f E) ;
+  e_rename f (EInr E)      := EInr (e_rename f E) ;
+  e_rename f (ESMatch E u v) := ESMatch (e_rename f E)
+                                        (t_rename (r_shift f) u)
+                                        (t_rename (r_shift f) v) .</span></span></span></pre></div>
+<div class="section" id="eager-redex-decomposition">
+<h2>Eager redex decomposition</h2>
+<p>Having case constructs for sum and product types, we have 3 kinds of
+beta-redexes. <tt class="docutils literal">e_elim Γ x y</tt> represents eliminators taking a
+<tt class="docutils literal">term Γ x</tt> to a <tt class="docutils literal">term Γ y</tt>.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">e_elim</span> (<span class="nv">Γ</span> : ctx) : ty -&gt; ty -&gt; <span class="kt">Type</span> :=
+| RApp {a b} : e_val Γ a -&gt; e_elim Γ (a → b) b
+| RPMatch {a b x} : term (Γ ▶ a ▶ b) x -&gt; e_elim Γ (a × b) x
+| RSMatch {a b x} : term (Γ ▶ a) x -&gt; term (Γ ▶ b) x -&gt; e_elim Γ (a + b) x
+.</span></span></span></pre><p>Finally &quot;eager term&quot;. The most important lemma for defining eager evaluation will
+explain how eager terms are in bijection with terms. In plain english, eager terms
+are terms where the next eager-redex to evaluate is explicited. In particular,
+either there is no such redex and the term is a value, or it can be decomposed as
+<tt class="docutils literal">E[v r]</tt> with <tt class="docutils literal">E</tt> an evaluation context, <tt class="docutils literal">v</tt> a value and <tt class="docutils literal">r</tt> an eliminator.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">e_term</span> (<span class="nv">Γ</span> : ctx) (<span class="nv">x</span> : ty) : <span class="kt">Type</span> :=
+| EVal : e_val Γ x -&gt; e_term Γ x
+| ERed {a b} : e_ctx Γ x b -&gt; e_val Γ a -&gt; e_elim Γ a b -&gt; e_term Γ x
+.</span></span></span></pre></div>
+<div class="section" id="finding-the-redex">
+<h2>Finding the redex</h2>
+<p>Given an ongoing computation, that is a term in an evaluation context <tt class="docutils literal">E[t]</tt>,
+we want to find the next redex in CBV evaluation order.</p>
+<p>We do it efficiently with only tail-calls by leveraging our type of
+evaluation contexts. The recursion pattern of these tail calls is non-trivial
+so we need some helpers to get coq (and coq-equations) to accept our definition.
+We do that extrinsically by providing a strictly decreasing measure on arguments
+across calls.</p>
+<p>The following definition should actually be two mutually recursive functions:</p>
+<pre class="literal-block">
+e_focus : e_ctx Γ y x → term Γ x → e_term Γ y 
+e_focus_backtrack : e_ctx Γ y x → e_val Γ x → e_term Γ y
+</pre>
+<p>But coq-equations does not seem to allow <tt class="docutils literal">by wf ...</tt> hints in mutual blocks
+so we had to hack it into a single function using a sum.</p>
+<p>The idea is that <tt class="docutils literal">e_focus</tt> will descend into the left-most
+unexplored branches, recording its path by growing the evaluation
+context. When hitting a value we have to backtrack on the evaluation
+context, either finding a suitable redex or descending in another
+branch.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations focus_aux {Γ x y} (E : e_ctx Γ y x) (t : term Γ x + e_val Γ x)
+          : e_term Γ y <span class="bp">by</span> <span class="kn">wf</span> (ctx_size E + aux_size t)%nat lt :=
+  focus_aux E (inl (Var i))      := focus_aux E (inr (VVar i)) ;
+  focus_aux E (inl (Lam a))      := focus_aux E (inr (VLam a)) ;
+  focus_aux E (inl (Rec a))      := focus_aux E (inr (VRec a)) ;
+  focus_aux E (inl (App a b))    := focus_aux (EApp_l E b) (inl a) ;
+  focus_aux E (inl (Pair a b))   := focus_aux (EPair_l E b) (inl a) ;
+  focus_aux E (inl (PMatch a b)) := focus_aux (EPMatch E b) (inl a) ;
+  focus_aux E (inl (Inl a))      := focus_aux (EInl E) (inl a) ;
+  focus_aux E (inl (Inr a))      := focus_aux (EInr E) (inl a) ;
+  focus_aux E (inl (SMatch a b c)) := focus_aux (ESMatch E b c) (inl a) ;
+
+  focus_aux EHole         (inr v) := EVal v ;
+  focus_aux (EApp_l E u)  (inr v) := focus_aux (EApp_r E v) (inl u) ;
+  focus_aux (EApp_r E u)  (inr v) := ERed E u (RApp v) ;
+  focus_aux (EPair_l E u) (inr v) := focus_aux (EPair_r E v) (inl u) ;
+  focus_aux (EPair_r E u) (inr v) := focus_aux E (inr (VPair u v)) ;
+  focus_aux (EPMatch E b) (inr v) := ERed E v (RPMatch b) ;
+  focus_aux (EInl E)      (inr v) := focus_aux E (inr (VInl v)) ;
+  focus_aux (EInr E)      (inr v) := focus_aux E (inr (VInr v)) ;
+  focus_aux (ESMatch E a b) (inr v) := ERed E v (RSMatch a b) .</span></span></span></pre><pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">End</span> <span class="nf">focus_aux</span>.</span></span></span></pre><p>From now on, a lot of functions which would usually be presented as taking a term
+as input, will take an ongoing evaluation instead, that is a term <tt class="docutils literal">a</tt> decomposed
+as <tt class="docutils literal">E[b]</tt>. We call such a package an &quot;evaluation argument&quot;.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">eval_arg</span> (<span class="nv">Γ</span> : ctx) (<span class="nv">x</span> : ty) : <span class="kt">Type</span> :=
+| EA {y} : e_ctx Γ x y -&gt; term Γ y -&gt; eval_arg Γ x.</span></span></span></pre><pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">ea_start</span> {<span class="nv">Γ</span> <span class="nv">x</span>} (<span class="nv">u</span> : term Γ x) : eval_arg Γ x := EA EHole u.</span></span></span></pre><p>Efficiently find the first redex in <tt class="docutils literal">E[t]</tt></p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations e_focus {Γ x} : eval_arg Γ x -&gt; e_term Γ x :=
+  e_focus (EA E t) := focus_aux.focus_aux E (inl t).</span></span></span></pre></div>
+<div class="section" id="eager-normal-forms">
+<h2>Eager normal forms</h2>
+<p>Repeatedly applying the redex-finding function and then reducing it, we will either
+end-up with a value or, as we evaluate open terms, get stuck on a redex whose premise
+is a variable. That's exactly what eager-normal-forms are.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">e_nf</span> (<span class="nv">Γ</span> : ctx) (<span class="nv">x</span> : ty) : <span class="kt">Type</span> :=
+| NVal : e_val Γ x -&gt; e_nf Γ x
+| NRed {a b} : e_ctx Γ x b -&gt; Γ ∋ a -&gt; e_elim Γ a b -&gt; e_nf Γ x
+.</span></span></span></pre><p>For encoding reasons, our dependent-itree machinerie works on indexed
+sets <tt class="docutils literal">I → Type</tt> yet all our types (terms, values, variables, etc) are all of the
+form <tt class="docutils literal">ctx → ty → Type</tt>. Here we define some uncurried versions. Additionnaly
+we constrain contexts to contain only negative types as we would like to work with
+<em>focused</em> terms that do not contain spurious stuck redexes.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">neg_t_env</span> : <span class="kt">Type</span> := neg_ctx * ty.</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_arg&#39;</span> : neg_t_env -&gt; <span class="kt">Type</span> := uncurry2 (eval_arg ∘ of_n_ctx).</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">term&#39;</span> : neg_t_env -&gt; <span class="kt">Type</span> := uncurry2 (term ∘ of_n_ctx).</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">ea_start&#39;</span> {<span class="nv">i</span>} (<span class="nv">u</span> : term&#39; i) : eval_arg&#39; i := EA EHole u.</span></span></span></pre></div>
+<div class="section" id="the-evaluator">
+<h2>The evaluator</h2>
+<p>This next function is the core of our evaluator implementing a single
+reduction step, outputing either a term-in-context to continue
+evaluation on, or a normal form if the evaluation is done.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations eval_step {Γ x} (t : e_term Γ x) : eval_arg Γ x + e_nf Γ x :=
+  eval_step (EVal v)                   := inr (NVal v) ;
+  eval_step (ERed E (VVar i) r)        := inr (NRed E i r) ;
+  eval_step (ERed E (VRec u) (RApp v)) :=
+    inl (EA E (u /ₛ t_shift (t_of_val v) /ₛ Rec u)) ;
+  eval_step (ERed E (VLam u) (RApp v)) :=
+    inl (EA E (u /ₛ t_of_val v)) ;
+  eval_step (ERed E (VPair u0 u1) (RPMatch a)) :=
+    inl (EA E (a /ₛ t_shift (t_of_val u1) /ₛ t_of_val u0)) ;
+  eval_step (ERed E (VInl u) (RSMatch a b)) :=
+    inl (EA E (a /ₛ t_of_val u)) ;
+  eval_step (ERed E (VInr u) (RSMatch a b)) :=
+    inl (EA E (b /ₛ t_of_val u)) .</span></span></span></pre><p>And now the evaluator is complete: our iterₐ combinator encoding tail-recursion
+ties the knot, repeatedly finding the next redex and reducing it.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_enf</span> {<span class="nv">Γ</span> <span class="nv">x</span>} : eval_arg Γ x -&gt; itree₀ ∅ₑ (e_nf Γ x) :=
+  iterₐ (ret₀ ∘ eval_step ∘ e_focus).</span></span></span></pre></div>
+</div>
+<div class="section" id="lassen-trees">
+<h1>Lassen trees</h1>
+<p>Normal forms for some notion of reduction induce an equivalence on terms defined
+by equality of normal forms. But for eager normal forms, evaluation may get stuck
+quite early and this induced equivalence won't be very interesting. What we would
+like is to somehow continue executing stuck terms. Enter Lassen trees.</p>
+<p>Eager normal forms that are stuck, ie <tt class="docutils literal">E[x v]</tt> may be seen as an
+interaction between an unknown context containing the free variable
+<tt class="docutils literal">x</tt> and the term at hand, controlling both <tt class="docutils literal">E</tt> and <tt class="docutils literal">v</tt>. In this
+view, <tt class="docutils literal">x</tt> is a question, <tt class="docutils literal">v</tt> is its argument, and <tt class="docutils literal">E</tt> is the
+continuation taking as argument the hypothetic answer. TODO ref on
+dialogical view of reduction/evaluation.</p>
+<p>Lassen, adapting Böhm trees to CBV settings, proposed to construct a
+potentially infinite (coinductive) tree where nodes are eager normal
+forms. Hence there are two kinds of nodes:</p>
+<ul class="simple">
+<li>Value nodes of some type <tt class="docutils literal">a</tt>, which have one child for each observation
+that can be made on <tt class="docutils literal">a</tt> (more on that below).</li>
+<li>Stuck redex nodes, which have the same children as a value node,
+applied to the redex argument, and additionally have another child continuing
+the evaluation on <tt class="docutils literal">E[y]</tt> for <tt class="docutils literal">y</tt> fresh, specifying how evaluation <em>would</em>
+continue if the stuck redex had been reduced to an abstract <tt class="docutils literal">y</tt>.</li>
+</ul>
+<p>Lassen trees thus caracterize the full CBV <em>strategy</em> on a term, that
+is, how it would react in any context. To be more formal, we will want
+to prove that bisimulation of lassen trees implies contextual
+equivalence of the terms, or, that lassen trees provide a
+fully-abstract model of STLC.</p>
+<div class="section" id="abstract-values-and-observations">
+<h2>Abstract values and observations</h2>
+<p>There are a couple things to precise before going forward: In the
+stuck node, why do we continue to evaluate on <tt class="docutils literal">E[y]</tt> with fresh
+<tt class="docutils literal">y</tt> instead of continuing on <tt class="docutils literal">E[v]</tt> for any acceptable value
+<tt class="docutils literal">v</tt>? One thing to understand is that these universally quantified
+items (fresh variable or value) will appear in the traces of our tree and hence
+will be compared for equality in a bisimulation. Thus it is clear that
+we do not want values of function types (lambdas) in our traces:
+comparing function by syntactic equality is not the observational equality we want.
+On the other hand, values of other types (spoiler: all positive types)
+are perfectly fine appearing in traces.since their allowed observations are exactly
+defined by their syntactic value.</p>
+<p>To resolve this we introduce a notion of <em>abstract value</em>, which hides
+components that have negative types. Note that there is no variable: an abstract
+value can (and must) be a <em>fresh</em> variable on negative types and a constructor on
+positive types.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">a_val</span> (<span class="nv">Γ</span> : neg_ctx) : ty -&gt; <span class="kt">Type</span> :=
+| AArr {a b} : a_val Γ (a → b)
+| APair {a b} : a_val Γ a -&gt; a_val Γ b -&gt; a_val Γ (a × b)
+| AInl {a b} : a_val Γ a -&gt; a_val Γ (a + b)
+| AInr {a b} : a_val Γ b -&gt; a_val Γ (a + b)
+.</span></span></span></pre><p>When continuing evaluation after a redex, we will universally quantify
+on an abstract value <tt class="docutils literal">a</tt> and continue on <tt class="docutils literal">E[t_of_a(a)]</tt> where <tt class="docutils literal">t_of_a</tt>
+turns an abstract value into a term, extending the context with a fresh variable
+for everything that has been hiden.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations a_cext {Γ x} : a_val Γ x -&gt; neg_ctx :=
+  a_cext (@AArr a b)   := nil ▶ ((a → b)%ty ,&amp; NArr) ;
+  a_cext (APair u v)   := a_cext u +▶ a_cext v ;
+  a_cext (AInl u)      := a_cext u ;
+  a_cext (AInr u)      := a_cext u .</span></span></span></pre><pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations t_of_a {Γ x} (u : a_val Γ x) : term (Γ +▶ a_cext u : neg_ctx) x :=
+  t_of_a (AArr)      := Var top ;
+  t_of_a (APair u v) := Pair (t_rename r_concat3_1&#39; (t_of_a u))
+                             (t_rename r_concat3_2&#39; (t_of_a v));
+  t_of_a (AInl u)    := Inl (t_of_a u) ;
+  t_of_a (AInr u)    := Inr (t_of_a u) .</span></span></span></pre><p>We will also need to define the set of queries (or observations) that can be made
+on a given abstract value.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations a_obs {Γ x} : a_val Γ x -&gt; <span class="kt">Type</span> :=
+  a_obs (@AArr a b) := a_val Γ a ;
+  a_obs (APair u v) := a_obs u + a_obs v ;
+  a_obs (AInl u)    := a_obs u ;
+  a_obs (AInr u)    := a_obs u .</span></span></span></pre><p>And how the typing context and goal type change at a given observation.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations a_cont {Γ x} (v : a_val Γ x) : a_obs v -&gt; neg_t_env :=
+  a_cont (@AArr a b) v       := ((Γ +▶ a_cext v)%ctx , b) ;
+  a_cont (APair u v) (inl o) := a_cont u o ;
+  a_cont (APair u v) (inr o) := a_cont v o ;
+  a_cont (AInl u)    o       := a_cont u o ;
+  a_cont (AInr u)    o       := a_cont u o .</span></span></span></pre><p>Now we explain how to turn a value into an abstract value. It is crucial that the
+context is negative and thus every positive value must be a constructor.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations a_of_val {Γ : neg_ctx} x (v : e_val Γ x) : a_val Γ x :=
+  a_of_val (_ → _) v           := AArr ;
+  a_of_val (_ × _) (VPair u v) := APair (a_of_val _ u) (a_of_val _ v) ;
+  a_of_val (_ + _) (VInl u)    := AInl (a_of_val _ u) ;
+  a_of_val (_ + _) (VInr u)    := AInr (a_of_val _ u) ;
+
+  a_of_val (Unit)  (VVar i) <span class="kr">with</span> neg_var i := { | (!) } ;
+  a_of_val (_ × _) (VVar i) <span class="kr">with</span> neg_var i := { | (!) } ;
+  a_of_val (_ + _) (VVar i) <span class="kr">with</span> neg_var i := { | (!) } .</span></span></span></pre><p>And how to apply that observation to get a new term to continue on.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations apply_obs {Γ : neg_ctx} x (v : e_val Γ x) (o : a_obs (a_of_val v))
+           : term&#39; (a_cont (a_of_val v) o) :=
+  apply_obs (_ → _) v           o := App (t_rename r_concat_l&#39; (t_of_val v))
+                                         (t_of_a o) ;
+  apply_obs (_ × _) (VPair u v) (inl o) := apply_obs _ u o ;
+  apply_obs (_ × _) (VPair u v) (inr o) := apply_obs _ v o ;
+  apply_obs (_ + _) (VInl u)    o := apply_obs _ u o ;
+  apply_obs (_ + _) (VInr u)    o := apply_obs _ u o ;
+
+  apply_obs (Unit)  (VVar i) o <span class="kr">with</span> neg_var i := { | (!) } ;
+  apply_obs (_ × _) (VVar i) o <span class="kr">with</span> neg_var i := { | (!) } ;
+  apply_obs (_ + _) (VVar i) o <span class="kr">with</span> neg_var i := { | (!) } .</span></span></span></pre></div>
+<div class="section" id="lassen-tree-structure">
+<h2>Lassen tree structure</h2>
+<p>We now give the structure of Lassen trees using our itree library. Our
+trees will be intrinsically typed and hence indexed by a negative
+context <tt class="docutils literal">Γ</tt> and a type <tt class="docutils literal">x</tt>.</p>
+<p>Node shapes are as follows:</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">enf_qry</span> (<span class="nv">Γ</span> : neg_ctx) (<span class="nv">x</span> : ty) : <span class="kt">Type</span> :=
+| LVal : a_val Γ x -&gt; enf_qry Γ x
+| LRed a b : (Γ : ctx) ∋ (a → b)%ty -&gt; a_val Γ a -&gt; enf_qry Γ x.</span></span></span></pre><p>For the benefit of factoring code better and automatic derivation of
+an OGS later, we don't directly define the set of children at a given
+node shape. The set of children will be given by <tt class="docutils literal">list enf_kon</tt>,
+where <tt class="docutils literal">enf_kon</tt> is a type of continuation: either continuing on a
+context or continuing on a value.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Variant</span> <span class="nf">enf_kon</span> : <span class="kt">Type</span> :=
+| KVal {Γ : neg_ctx} {x : ty} : a_val Γ x -&gt; enf_kon
+| KCtx : neg_ctx -&gt; ty -&gt; ty -&gt; enf_kon
+.</span></span></span></pre><p>The set of continuations at every shape:</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations enf_u_rsp Γ x : enf_qry Γ x -&gt; list enf_kon :=
+  enf_u_rsp Γ x (LVal v) := KVal v :: nil ;
+  enf_u_rsp Γ x (LRed a b i v) := KVal v :: KCtx Γ x b :: nil .</span></span></span></pre><p>For every continuation, the set of children:</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations enf_k_rsp : enf_kon -&gt; <span class="kt">Type</span> :=
+  enf_k_rsp (KVal v) := a_obs v ;
+  enf_k_rsp (KCtx Γ x b) := a_val Γ b .</span></span></span></pre><p>And their new index:</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations enf_k_nxt k : enf_k_rsp k -&gt; neg_t_env :=
+  enf_k_nxt (KVal v)     o := a_cont v o ;
+  enf_k_nxt (KCtx Γ x b) v := ((Γ +▶ a_cext v)%ctx , x).</span></span><span class="alectryon-wsp"> </span></span></pre><p>Packing everything together. We get <tt class="docutils literal">lassen X</tt> which is the set
+of lassen trees with leaves of type <tt class="docutils literal">X</tt>. &quot;Real&quot; lassen trees will not
+have any leaves.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">enf_e</span> : uniform_event neg_t_env neg_t_env :=
+  UEvent (uncurry2 enf_qry) (enf_kon) (uncurry2 enf_u_rsp)
+         (enf_k_rsp) (enf_k_nxt).</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-wsp"><span class="highlight">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">lassen</span> : endo (neg_t_env -&gt; <span class="kt">Type</span>) := itree enf_e.</span></span></span></pre><p>We explain how to inject values and contexts into lassen trees.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">lassen_val</span> {<span class="nv">Γ</span> : neg_ctx} {<span class="nv">x</span>} (<span class="nv">v</span> : e_val Γ x)
+           (<span class="nv">r</span> : enf_k_rsp (KVal (a_of_val v)))
+           : lassen (eval_arg&#39; +ᵢ ∅ᵢ) (enf_k_nxt _ r) :=
+  Ret (inl (ea_start (apply_obs v r))) .</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-wsp"><span class="highlight">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">lassen_ctx</span> {<span class="nv">Γ</span> : neg_ctx} {<span class="nv">x</span> <span class="nv">b</span>} (<span class="nv">E</span> : e_ctx Γ x b)
+          (<span class="nv">r</span> : enf_k_rsp (KCtx Γ x b))
+          : lassen (eval_arg&#39; +ᵢ ∅ᵢ) (enf_k_nxt _ r) :=
+  Ret (inl (EA (e_rename r_concat_l&#39; E) (t_of_a r) : eval_arg&#39; (_ , _))) .</span></span></span></pre><p>Then how to inject eager normal forms into lassen trees.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight">Equations lassen_enf {Γ : neg_ctx} {x} (v : e_nf Γ x)
+          : lassen (eval_arg&#39; +ᵢ ∅ᵢ) (Γ , x) :=
+  lassen_enf (NVal v) :=
+    Vis (LVal (a_of_val v) : qry enf_e (_, _))
+        (<span class="kr">λ</span> { | existT _ F0 r =&gt; lassen_val v r }) ;
+  lassen_enf (NRed E i r) <span class="kr">with</span> neg_var i := {
+    lassen_enf (NRed E i (RApp v)) NArr :=
+      Vis (LRed _ _ i (a_of_val v) : qry enf_e (_, _))
+          (<span class="kr">λ</span> { | existT _ (F0)    r =&gt; lassen_val v r ;
+               | existT _ (FS F0) r =&gt; _ }) }.</span></span></span></pre><p>Inlining this breaks equations!</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><input class="alectryon-toggle" id="lcd-v-chk0" style="display: none" type="checkbox"><label class="alectryon-input" for="lcd-v-chk0"><span class="highlight">Obligation <span class="mi">1</span>.</span></label><small class="alectryon-output"><div class="alectryon-output-sticky-wrapper"><div class="alectryon-goals"><blockquote class="alectryon-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">Γ0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">neg_ctx</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">v3, v4</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">ty</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">i</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Γ0 ∋ (v3 → v4)%ty</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">x0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">ty</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">E</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">e_ctx Γ0 x0 v4</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">v</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">e_val Γ0 v3</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">r</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">a_val Γ0 v4</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">itree enf_e (eval_arg&#39; +ᵢ ∅ᵢ)
+  ((Γ0 +▶ a_cext r)%ctx, x0)</span></div></blockquote></div></div></small><span class="alectryon-wsp"> </span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="bp">exact</span> (lassen_ctx E r).</span></span><span class="alectryon-wsp"> </span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Qed</span>.</span></span></span></pre><p>And finally we tie the knot and iterate a sequence of evaluation to
+eager normal form and injection into lassen trees.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_lassen&#39;</span> : eval_arg&#39; ⇒ᵢ lassen ∅ᵢ :=
+  iter (<span class="kr">fun</span> &#39;(_ , _) <span class="nv">t</span> =&gt; emb_comp _ _ (eval_enf t) !&gt;= lassen_enf).</span></span></span></pre><p>Using our generic formulation of OGS based on history, we simply call
+<tt class="docutils literal">ogs_emb</tt> on our lassen tree to translate it to an OGS version.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_ogs&#39;</span> {<span class="nv">i</span>} (<span class="nv">a</span> : eval_arg&#39; i) : itree (ogs enf_e) ∅ᵢ (i , nil) :=
+  @ogs_emb _ _ _ _ nil t1_0 (eval_lassen&#39; _ a).</span></span></span></pre><p>And to wrap up, two cleaner interfaces, starting with an empty evaluation context.</p>
+<pre class="alectryon-io"><!-- Generator: Alectryon --><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_lassen</span> {<span class="nv">Γ</span> : neg_ctx} {<span class="nv">x</span>} (<span class="nv">u</span> : term Γ x) : lassen ∅ᵢ (Γ , x) :=
+  eval_lassen&#39; _ (ea_start&#39; (u : term&#39; (_ , _))).</span></span><span class="alectryon-wsp">
+</span></span><span class="alectryon-wsp"><span class="highlight">
+</span></span><span class="alectryon-sentence"><span class="alectryon-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">eval_ogs</span> {<span class="nv">Γ</span> : neg_ctx} {<span class="nv">x</span>} (<span class="nv">u</span> : term Γ x)
+           : itree (ogs enf_e) ∅ᵢ ((Γ , x) , nil) :=
+  eval_ogs&#39; (ea_start&#39; (u : term&#39; (_ , _))).</span></span></span></pre></div>
+</div>
+</div>
+</div>
+</div></body>
+</html>
